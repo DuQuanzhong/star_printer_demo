@@ -2,9 +2,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_star_prnt/flutter_star_prnt.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:starxpand/starxpand.dart';
 
 
 class HomePage extends StatefulWidget {
@@ -16,32 +16,15 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  List<PortInfo> printerList = [];
 
-  String guide = "";
-
-  Timer? timer;
-
-  Timer? searchTimer;
+  List<StarXpandPrinter> printerList = [];
 
   @override
   void initState() {
     // TODO: implement initState
     super.initState();
-    timer ??= Timer.periodic(const Duration(seconds: 2), (timer) {
-      if (printerList.isEmpty) {
-        return;
-      } else {
-        for (var element in printerList) {
-          _printAction(element);
-        }
-      }
-    });
-    searchTimer ??= Timer.periodic(const Duration(seconds: 3), (timer) {
-      if (printerList.isEmpty) {
-        _findPrinters();
-      }
-    });
+    _findPrinters();
+
   }
 
   @override
@@ -85,44 +68,13 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  ///  获取打印机
-  Future<void> _findPrinters() async {
-    // if (!(await fetchUsbPermission())) {
-    //   showToast('获取usb权限失败');
-    //   return;
-    // }
-    // if (!(await fetchToothPermission())) {
-    //   showToast('获取蓝牙权限失败');
-    //   return;
-    // }
-
-    try {
-      var ps = await StarPrnt.portDiscovery(StarPortType.All);
-      debugPrint('${ps.length}');
-      if (ps.isEmpty) {
-        showToast('未找到附近的设备');
-      } else {
-        searchTimer?.cancel();
-        searchTimer = null;
-        showToast('找到设备了');
-      }
-      setState(() {
-        printerList = ps;
-      });
-    } catch (e) {
-      showToast(e.toString());
-    }
-  }
-
   ///  打印机item Widget
-  Widget _buildPrinterItemWidget(PortInfo printer) {
+  Widget _buildPrinterItemWidget(StarXpandPrinter printer) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: const BorderRadius.all(
-            Radius.circular(4),
-          ),
+          borderRadius: const BorderRadius.all(Radius.circular(4),),
           boxShadow: [
             BoxShadow(
               color: const Color(0xFFDBDBDB).withOpacity(0.5),
@@ -130,33 +82,29 @@ class _HomePageState extends State<HomePage> {
               blurRadius: 4,
               offset: Offset.zero,
             ),
-          ]),
+          ]
+      ),
       child: Column(
         children: [
           Row(
             children: [
               const Text('打印机名字：'),
-              Text(printer.modelName ?? '未知'),
+              Text(printer?.model.label ?? '未知'),
             ],
           ),
           Row(
             children: [
-              const Text('端口名字：'),
-              Text(printer?.portName ?? '未知'),
+              const Text('打印机id：'),
+              Text(printer?.identifier ?? '未知'),
             ],
           ),
           Row(
             children: [
               const Text('连接方式：'),
-              Text(printer?.macAddress ?? '未知'),
+              Text(printer?.interface.name ?? '未知'),
             ],
           ),
-          Row(
-            children: [
-              const Text('usb序列号：'),
-              Text(printer?.usbSerialNumber ?? '未知'),
-            ],
-          ),
+
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
@@ -168,6 +116,7 @@ class _HomePageState extends State<HomePage> {
                   "测试打印",
                 ),
               ),
+
               TextButton(
                 onPressed: () {
                   _openDrawer(printer);
@@ -176,57 +125,94 @@ class _HomePageState extends State<HomePage> {
                   "Open Drawer",
                 ),
               ),
+
+              // TextButton(
+              //   onPressed: () {
+              //     _startInputListener(printer);
+              //   },
+              //   child: const Text(
+              //     "Input Listener",
+              //   ),
+              // ),
             ],
-          ),
+          )
+          ,
         ],
       ),
     );
   }
 
-  ///  打印内容
-  _printAction(PortInfo printer) async {
-    if (printer.portName!.isNotEmpty) {
-      final ByteData data = await rootBundle.load('assets/test.jpg');
-      Uint8List imageData = data.buffer.asUint8List();
-      print(await StarPrnt.getStatus(
-        portName: printer.portName!,
-        emulation: emulationFor(printer.modelName!),
-      ));
-
-      PrintCommands commands = PrintCommands();
-      commands.appendBitmapByte(
-        byteData: imageData,
-        diffusion: true,
-        bothScale: true,
-        alignment: StarAlignmentPosition.Left,
+  ///  获取打印机
+  Future<void> _findPrinters() async {
+    if (!(await fetchUsbPermission())) {
+      showToast('获取usb权限失败');
+      return;
+    }
+    if (!(await fetchToothPermission())) {
+      showToast('获取蓝牙权限失败');
+      return;
+    }
+    try {
+      var ps = await StarXpand.findPrinters(
+        timeout: 8000,
+        callback: (payload) {
+          debugPrint('printer: $payload');
+          showToast(payload.toString());
+        },
       );
-      // commands.openCashDrawer(1999);
-      print(await StarPrnt.sendCommands(
-          portName: printer.portName!,
-          emulation: emulationFor(printer.modelName!),
-          printCommands: commands));
+      debugPrint('${ps.length}');
+      if (ps.isEmpty) {
+        showToast('未找到附近的设备');
+      } else {
+        showToast('找到设备了');
+      }
+      setState(() {
+        printerList = ps;
+      });
+    } catch (e) {
+      showToast(e.toString());
     }
   }
 
-  String emulationFor(String modelName) {
-    String emulation = 'StarGraphic';
-    if (modelName != '') {
-      final em = StarMicronicsUtilities.detectEmulation(modelName: modelName);
-      emulation = em!.emulation!;
+
+  ///  打印内容
+  _printAction(StarXpandPrinter printer) async {
+    var doc = StarXpandDocument();
+    var printDoc = StarXpandDocumentPrint();
+
+    final ByteData data = await rootBundle.load('assets/test.jpg');
+    Uint8List imageData = data.buffer.asUint8List();
+    printDoc.actionPrintImage(imageData, 350);
+
+    printDoc.actionCut(StarXpandCutType.partial);
+
+    doc.addPrint(printDoc);
+    doc.addDrawer(StarXpandDocumentDrawer());
+    try {
+      bool printState = await StarXpand.printDocument(printer, doc);
+      if (printState) {
+        showToast('打印成功');
+      } else {
+        showToast('打印失败');
+      }
+    } catch (e) {
+      showToast(e.toString());
     }
-    return emulation;
   }
+
 
   ///  打开钱箱
-  _openDrawer(PortInfo printer) async {
-    PrintCommands commands = PrintCommands();
-    int actionNumber = int.parse(printer?.portName ?? '9100');
-    commands.openCashDrawer(actionNumber);
-    // commands.openCashDrawer(1999);
-    print(await StarPrnt.sendCommands(
-        portName: printer.portName!,
-        emulation: emulationFor(printer.modelName!),
-        printCommands: commands));
+  _openDrawer(StarXpandPrinter printer) async {
+    try {
+      bool isOpen = await StarXpand.openDrawer(printer);
+      if (isOpen) {
+        showToast('打开钱箱成功');
+      } else {
+        showToast('打开钱箱失败');
+      }
+    } catch (e) {
+      showToast(e.toString());
+    }
   }
 }
 

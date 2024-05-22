@@ -12,10 +12,13 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.6
-  flutter_star_prnt: ^2.4.1
+#  flutter_star_prnt: ^2.4.1
   fluttertoast: ^8.2.5
   #  权限配置
   permission_handler: ^11.3.1
+  #  usb  打印
+  starxpand:
+    path: ./plugins/starxpand-0.0.2
 
 dev_dependencies:
   flutter_test:
